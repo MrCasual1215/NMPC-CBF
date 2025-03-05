@@ -76,7 +76,7 @@ class SingleAgentSimulation:
             self._robot.run_local_planner()
             self._robot.run_controller(self._obstacles)
             self._robot.run_system()
-            # self.show()
+            self.show()
 
 
     def show(self):

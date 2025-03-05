@@ -1,3 +1,2 @@
-## 2D 导盲犬仿真
+## 基于NMPC-DCBF 的 2D 导盲犬仿真
 ### 模型： delayed model
-### 控制器： NMPC-CBF

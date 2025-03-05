@@ -3,7 +3,7 @@ import datetime
 import matplotlib.patches as patches
 
 from models.geometry_utils import *
-from sim.simulation import *
+from sim.mysimulation import *
 
 
 offset_x = 0.3    
@@ -17,6 +17,9 @@ class GuideDogDynamics:
         """Return updated state in a form of `np.ndnumpy`"""
 
         " x : xh, yh, xd, yd, theta,   u : vdx, vdy, w  "
+
+        dis = np.linalg.norm(np.array([x[0],x[1]])- np.array([x[2], x[3]]))
+        print(f"distance between human and dog: {dis:.2f}")
 
         x_next = np.ndarray(shape=(5,), dtype=float)
         x_next[2] = x[2] + (u[1]*math.cos(x[4]) + u[0]*math.sin(x[4])) * timestep
@@ -33,15 +36,15 @@ class GuideDogDynamics:
         y_ref = x_next[3] + delta[1]
         x_next[0] = alpha * x_ref + (1-alpha)*x[0]
         x_next[1] = alpha * y_ref + (1-alpha)*x[1]
+
+        
         return x_next
 
     @staticmethod
     def forward_dynamics_opt(timestep):
         """Return updated state in a form of `ca.SX`"""
 
-        offset_x = 0.3    
-        offset_y = 0.4
-        alpha = 0.2
+
 
         x_symbol = ca.SX.sym("x", 5)
         u_symbol = ca.SX.sym("u", 3)

@@ -19,6 +19,10 @@ class NmpcDcbfOptimizerParam:
         self.pomega = 10.0
         self.margin_dist = 0.00
         self.terminal_weight = 10.0
+        self.close2human_weight = 0
+        self.max_distance_between_humandog = 1.0
+        self.min_distance_between_humandog = 0.5
+        self.slack_panishment_weight = 0
 
 
 class NmpcDbcfOptimizer:
@@ -35,6 +39,7 @@ class NmpcDbcfOptimizer:
     def initialize_variables(self, param):
         self.variables["x"] = self.opti.variable(5, param.horizon + 1)
         self.variables["u"] = self.opti.variable(3, param.horizon)
+        # self.variables["slack_variables"] = self.opti.variable(1)
 
     def add_initial_condition_constraint(self):
         self.opti.subject_to(self.variables["x"][:, 0] == self.state._x)
@@ -198,6 +203,35 @@ class NmpcDbcfOptimizer:
                     self.add_point_to_convex_constraint(param,  obs_geo, safe_dist)
 
 
+
+    def add_get_close2human_cost(self, param):
+        # 当人自主运动时， 跟随着人
+        self.costs["close2human"] = 0
+        self.costs["close2human"] +=  param.close2human_weight * (
+            ca.mtimes(
+                (self.variables["x"][0,:] - self.variables["x"][2,:]),  
+                (self.variables["x"][0,:] - self.variables["x"][2,:]).T  
+            ) + ca.mtimes(
+                (self.variables["x"][1,:] - self.variables["x"][3,:]),  
+                (self.variables["x"][1,:] - self.variables["x"][3,:]).T  
+            )
+        )
+
+        self.costs["slack_panishment"] = 0
+        self.costs["slack_panishment"] += param.slack_panishment_weight *  self.variables["slack_variables"]**2
+
+        
+        
+    def add_get_close2human_constraint(self, param):
+        for i in range(param.horizon):
+            self.opti.subject_to(
+                (self.variables["x"][0,i]-self.variables["x"][2,i])**2 + (self.variables["x"][1,i]-self.variables["x"][3,i])**2 
+                  <= (param.max_distance_between_humandog + self.variables["slack_variables"])**2
+            )
+        ## 加入松弛变量
+        self.opti.subject_to(self.variables["slack_variables"] >= 0 ) 
+
+
     def add_warm_start(self, param, system):
         # TODO: wrap params
         x_ws, u_ws = system._dynamics.nominal_safe_controller(self.state._x, 0.1)
@@ -218,6 +252,8 @@ class NmpcDbcfOptimizer:
         self.add_prev_input_cost(param)
         self.add_input_smoothness_cost(param)
         self.add_obstacle_avoidance_constraint(param, system, obstacles)
+        # self.add_get_close2human_cost(param)
+        # self.add_get_close2human_constraint(param)
         self.add_warm_start(param, system)
 
     def solve_nlp(self):
@@ -233,4 +269,8 @@ class NmpcDbcfOptimizer:
         delta_timer = end_timer - start_timer
         self.solver_times.append(delta_timer.total_seconds())
         print("solver time: ", delta_timer.total_seconds())
+        # print("opt slack:",self.opti.value(self.variables["slack_variables"]))
+        # print("slack costs:",self.costs["slack_panishment"])
+
+        print()
         return opt_sol
