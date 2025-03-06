@@ -1,72 +1,67 @@
 import datetime
-
 import matplotlib.patches as patches
-
 from models.geometry_utils import *
-from sim.simulation import *
+from sim.followdogsimulation import *
 
-
-# 车的动力学约束、形状
-
-class KinematicCarDynamics:
+class FollowDogDynamics:
     @staticmethod
     def forward_dynamics(x, u, timestep):
         """Return updated state in a form of `np.ndnumpy`"""
-        l = 0.1
-        x_next = np.ndarray(shape=(4,), dtype=float)
-        x_next[0] = x[0] + x[2] * math.cos(x[3]) * timestep
-        x_next[1] = x[1] + x[2] * math.sin(x[3]) * timestep
-        x_next[2] = x[2] + u[0] * timestep
-        x_next[3] = x[3] + x[2] * math.tan(u[1]) / l * timestep
+
+        " x :  xd, yd, theta,   u : vdx, vdy, w  "
+
+        x_next = np.ndarray(shape=(3,), dtype=float)
+        x_next[0] = x[0] + (u[1]*math.cos(x[2]) + u[0]*math.sin(x[2])) * timestep
+        x_next[1] = x[1] + (u[1]*math.sin(x[2]) - u[0]*math.cos(x[2])) * timestep
+        x_next[2] = x[2]  + u[2] * timestep
         return x_next
 
     @staticmethod
     def forward_dynamics_opt(timestep):
         """Return updated state in a form of `ca.SX`"""
-        l = 0.1
-        x_symbol = ca.SX.sym("x", 4)
-        u_symbol = ca.SX.sym("u", 2)
-        x_symbol_next = x_symbol[0] + x_symbol[2] * ca.cos(x_symbol[3]) * timestep
-        y_symbol_next = x_symbol[1] + x_symbol[2] * ca.sin(x_symbol[3]) * timestep
-        v_symbol_next = x_symbol[2] + u_symbol[0] * timestep
-        theta_symbol_next = x_symbol[3] + x_symbol[2] * ca.tan(u_symbol[1]) / l * timestep
-        state_symbol_next = ca.vertcat(x_symbol_next, y_symbol_next, v_symbol_next, theta_symbol_next)
-        return ca.Function("dubin_car_dynamics", [x_symbol, u_symbol], [state_symbol_next])
+
+        x_symbol = ca.SX.sym("x", 3)
+        u_symbol = ca.SX.sym("u", 3)
+
+        xd_symbol_next = x_symbol[0] + (u_symbol[1]*ca.cos(x_symbol[2]) + u_symbol[0]*ca.sin(x_symbol[2])) * timestep
+        yd_symbol_next = x_symbol[1] + (u_symbol[1]*ca.sin(x_symbol[2]) - u_symbol[0]*ca.cos(x_symbol[2])) * timestep
+        theta_symbol_next = x_symbol[2]  + u_symbol[2] * timestep
+
+        state_symbol_next = ca.vertcat(xd_symbol_next, yd_symbol_next, theta_symbol_next)
+        return ca.Function("Follow_dog_dynamics", [x_symbol, u_symbol], [state_symbol_next])
 
     @staticmethod
-    def nominal_safe_controller(x, timestep, amin, amax):
+    def nominal_safe_controller(x, timestep):
         """Return updated state using nominal safe controller in a form of `np.ndnumpy`"""
-        u_nom = np.zeros(shape=(2,))
-        u_nom[0] = np.clip(-x[2] / timestep, amin, amax)
-        return KinematicCarDynamics.forward_dynamics(x, u_nom, timestep), u_nom
+        u_nom = np.zeros(shape=(3,))
+        return FollowDogDynamics.forward_dynamics(x, u_nom, timestep), u_nom
 
     @staticmethod
-    def safe_dist(x, timestep, amin, amax, dist_margin):
+    def safe_dist(timestep, vmax, horizon, dist_margin):
         """Return a safe distance outside which to ignore obstacles"""
         # TODO: wrap params
-        safe_ratio = 1.25
-        brake_min_dist = (abs(x[2]) + amax * timestep) ** 2 / (2 * amax) + dist_margin
-        return safe_ratio * brake_min_dist + abs(x[2]) * timestep + 0.5 * amax * timestep ** 2
+        safe_ratio = 1.0
+        return safe_ratio * vmax * timestep * horizon + dist_margin
+    
 
-
-class KinematicCarStates:
-    def __init__(self, x, u=np.array([0.0, 0.0])):
+class FollowDogStates:
+    def __init__(self, x, u=np.array([0.0, 0.0, 0.0])):
         self._x = x
         self._u = u
 
-    def translation(self):
+    def translation_dog(self):
         return np.array([[self._x[0]], [self._x[1]]])
-
+    
     def rotation(self):
         return np.array(
             [
-                [math.cos(self._x[3]), -math.sin(self._x[3])],
-                [math.sin(self._x[3]), math.cos(self._x[3])],
+                [math.cos(self._x[2]), -math.sin(self._x[2])],
+                [math.sin(self._x[2]), math.cos(self._x[2])],
             ]
         )
 
 
-class KinematicCarRectangleGeometry:
+class FollowDogRectangleGeometry:
     def __init__(self, length, width, rear_dist):
         self._length = length
         self._width = width
@@ -76,9 +71,9 @@ class KinematicCarRectangleGeometry:
     def equiv_rep(self):
         return [self._region]
 
-    def get_plot_patch(self, state, i, alpha):
+    def get_plot_patch(self, state, alpha=0.5):
         length, width, rear_dist = self._length, self._width, self._rear_dist
-        x, y, theta = state[0], state[1], state[3]
+        x, y, theta = state[0], state[1], state[2]
         xc = x + (rear_dist / 2) * math.cos(theta)
         yc = y + (rear_dist / 2) * math.sin(theta)
         vertices = np.array(
@@ -101,10 +96,25 @@ class KinematicCarRectangleGeometry:
                 ],
             ]
         )
-        return patches.Polygon(vertices, alpha=alpha, closed=True, fc="blue", ec="None", linewidth=0.5)
+        return patches.Polygon(vertices, closed=True, alpha=alpha, fc="tab:brown", ec="None", linewidth=0.8)
+
+class FollowDogCircleGeometry:
+    def __init__(self, r):
+        self._r = r
+        self._region = CircleRegion(r)
+
+    def equiv_rep(self):
+        return [self._region]
+
+    def get_plot_patch(self, state, alpha=0.5):
+        x = state[0]
+        y = state[1]
+        r = self._r
+        return patches.Circle((x, y), radius=r, alpha=alpha, fc='None', ec="orange", linewidth=2)
 
 
-class KinematicCarMultipleGeometry:
+
+class FollowDogGeometry:
     def __init__(self):
         self._num_geometry = 0
         self._geometries = []
@@ -118,12 +128,12 @@ class KinematicCarMultipleGeometry:
         self._regions.append(geometry._region)
         self._num_geometry += 1
 
-    def get_plot_patch(self, state, region_idx, alpha):
-        return self._geometries[region_idx].get_plot_patch(state, region_idx, alpha)
+    def get_plot_patch(self, state, region_idx, alpha=0.5):
+        return self._geometries[region_idx].get_plot_patch(state, alpha)
 
 
 
-class KinematicCarSystem(System):
+class FollowDogSystem(System):
     def get_state(self):
         return self._state._x
 

@@ -11,7 +11,7 @@ class GuideDogTrajectoryGenerator:
         self._num_waypoint = None
         # local path
         self._reference_speed = 0.2
-        self._num_horizon = 11
+        self._num_horizon = 100
         self._local_path_timestep = 0.1
         self._local_trajectory = None
         self._proj_dist_buffer = 0.05

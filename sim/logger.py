@@ -9,6 +9,10 @@ class ControllerLogger:
         self._xtrajs = []
         self._utrajs = []
 
+class HumanTrajectoryLogger:
+    def __init__(self) -> None:
+        self._states = []
+
 
 class LocalPlannerLogger:
     def __init__(self):

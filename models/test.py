@@ -9,7 +9,5 @@ x= np.array([
 ])
 
 
-squared_sum = ca.sum1(ca.sqrt((x[0] - x[2])**2 + \
-              (x[1] - x[3])**2))
-
-print(squared_sum)
+a = np.mean(x,0)
+print(a)

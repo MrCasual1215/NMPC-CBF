@@ -1,33 +1,40 @@
+## NMPC-DCBF based Guiding-Leading hybrid control mode 
 
-- create_env() # 创建地图
-  - 返回 起点、终点、地图栅格信息和障碍物（矩形）
+### Guiding Dog
+1. 当有明确目的的时候，由四足机器人来进行引导人进行前进
+2. 状态变量为
+$$
+  (x_h, y_h, x_d, y_d, \theta)
+$$
+3. 动力学模型
+![Alt text](image.png)
+  **在线辨识参数$offset_x, offset_y$?**
+3. constrains
+   1. 动力学约束
+   2. 狗（凸多边形）与静态障碍物的约束
+   3. 人（点）与静态障碍物的约束
+   4. 输入约束
+   5. 状态变量的约束
+4. costs
+   1. 过程/终点的轨迹跟随cost
+   2. 输入cost
+   3. smooth cost
+### Leading Huamn
+1. 当人想要凭借主观意识自主移动时，狗跟随人的移动
+2. 状态变量为
+$$
+  (x_d, y_d, \theta)
+$$
+1. constrains
+   1. 动力学约束
+   2. 狗（凸多边形）与静态障碍物的约束
+   3. 人（点）与静态障碍物的约束
+   4. 输入约束
+   5. 状态变量的约束
+2. costs
+   1. 跟随人的cost
+   2. 输入cost
+   3. smooth cost
 
-- 创建geometry_regions（车的几何区域）
-
-- 创建 Robot类 包括机器人位置、动力学、几何区域
-
-- 为机器人创建 global planner、local planner 和 controller
-    - global planner 初始化：  **这块应该不用修改**
-      - 输入：栅格信息、 margin是与障碍物的距离
-  
-    - local planner 初始化： **待修改**
-      可以修改的点：
-      - horizon
-      - 匀速的速度
-    
-    - controller  **着重修改**
-      - 运动学约束、权重
-
-- 创建simulation类
-  - 机器人、障碍物和终点
-
-
-
-### controller:
-
-NMPCcontroller:
-  - 初始化：KinematicCarDynamics()，NmpcDcbfOptimizerParam()
-  NmpcDbcfOptimizer：
-    - 初始化，variables={}, costs={}, dynamics_opt=KinematicCarDynamics() # casadi中的动力学约束
 
     
