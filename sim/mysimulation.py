@@ -40,9 +40,16 @@ class Robot:
         self._controller = controller
         self._controller_logger = ControllerLogger()
 
-    def run_global_planner(self, sys, obstacles, goal_pos):
+    def run_global_planner(self, sys, obstacles, goal_poses):
         # TODO: global path shall be generated with `system` and `obstacles`.
-        self._global_path = self._global_planner.generate_path(sys, obstacles, goal_pos)
+        for i, goal in enumerate(goal_poses):
+            if i == 0:
+                global_paths = self._global_planner.generate_path(sys, obstacles, sys.get_state()[:2], goal)
+            else:
+                global_path = self._global_planner.generate_path(sys, obstacles, goal_poses[i-1], goal)
+                global_paths = np.concatenate((global_paths, global_path), axis=0)
+        print("global_path", global_paths)
+        self._global_path = global_paths
         self._global_planner.logging(self._global_planner_logger)
 
     def run_local_planner(self):
@@ -50,9 +57,9 @@ class Robot:
         self._local_trajectory = self._local_planner.generate_trajectory(self._system, self._global_path)
         self._local_planner.logging(self._local_planner_logger)
 
-    def run_controller(self, obstacles):
+    def run_controller(self, obstacles, dynamic_obstacle):
         self._control_action = self._controller.generate_control_input(
-            self._system, self._global_path, self._local_trajectory, obstacles
+            self._system, self._global_path, self._local_trajectory, obstacles, dynamic_obstacle
         )
         self._controller.logging(self._controller_logger)
 
@@ -63,20 +70,27 @@ class Robot:
 
 
 class SingleAgentSimulation:
-    def __init__(self, robot, obstacles, goal_position):
+    def __init__(self, robot, obstacles, dynamic_obstacle, goal_positions):
         self._robot = robot
         self._obstacles = obstacles
-        self._goal_position = goal_position
+        self._dynamic_obstacle = dynamic_obstacle
+        self._goal_positions = goal_positions
         self.fig, self.ax = plt.subplots(figsize=(20, 12.0))
 
 
     def run_navigation(self, navigation_time):
-        self._robot.run_global_planner(self._robot._system, self._obstacles, self._goal_position)
+        self._robot.run_global_planner(self._robot._system, self._obstacles, np.array(self._goal_positions))
         while self._robot._system._time < navigation_time:
+            self.run_agents()
             self._robot.run_local_planner()
-            self._robot.run_controller(self._obstacles)
+            self._robot.run_controller(self._obstacles, self._dynamic_obstacle)
             self._robot.run_system()
             self.show()
+
+    def run_agents(self):
+        # print(self._robot._system._time)
+        self._dynamic_obstacle[0].move(self._robot._system._time, -0.1)
+        
 
 
     def show(self):
@@ -99,6 +113,11 @@ class SingleAgentSimulation:
         for obs in self._obstacles:
             obs_patch = obs.get_plot_patch()
             self.ax.add_patch(obs_patch)
+
+        for obs in self._dynamic_obstacle:
+            obs_patch = obs.get_plot_patch()
+            self.ax.add_patch(obs_patch)
+
 
         robot_patch = []
         for i in range(self._robot._system._geometry._num_geometry):

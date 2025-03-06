@@ -31,6 +31,8 @@ from planning.trajectory_generator.guide_dog_trajectory_generator import (
 )
 from sim.mysimulation import Robot, SingleAgentSimulation
 
+from obstacles.dynamic_obstacle import *
+
 def animate_world(simulation):
     fig, ax = plt.subplots(figsize=(20, 12.0))
     ax.set_aspect("equal")
@@ -90,11 +92,7 @@ def animate_world(simulation):
 
 
 def guide_dog_simulation_test():
-    start_s, goal_s, grid, obstacles = create_env()
-
-    # print("start_s",start_s)
-    # print("goal_s",goal_s)
-
+    start_sate, goal_states, grid, obstacles, dynamic_obstacles = create_env()
     geometry_regions = GuideDogGeometry() # 导盲犬的形状
     geometry_regions.add_geometry(GuideDogRectangleGeometry(length=0.8, width=0.45, rear_dist=0.0)) # 狗的形状
     geometry_regions.add_geometry(GuideDogCircleGeometry(r=0.3)) # 人的形状
@@ -102,7 +100,7 @@ def guide_dog_simulation_test():
 
     robot = Robot(
         GuideDogSystem(
-            state=GuideDogStates(x=start_s),
+            state=GuideDogStates(x=start_sate),
             geometry=geometry_regions,
             dynamics=GuideDogDynamics(),
         )
@@ -113,7 +111,7 @@ def guide_dog_simulation_test():
     robot.set_local_planner(GuideDogTrajectoryGenerator())
     robot.set_controller(NmpcDcbfController(dynamics=GuideDogDynamics(), opt_param=NmpcDcbfOptimizerParam()))
 
-    sim = SingleAgentSimulation(robot, obstacles, np.array([goal_s[0], goal_s[1]]))
+    sim = SingleAgentSimulation(robot, obstacles, dynamic_obstacles, goal_states)
     sim.run_navigation(40.0)
     # animate_world(sim)
     print("median: ", st.median(robot._controller._optimizer.solver_times))
@@ -125,24 +123,39 @@ def guide_dog_simulation_test():
 
 def create_env():
     s = 1.2 # scale of environment
+
+    # init
     human_init = [2 * s, 2.7 * s,  0]
-    human_goal = [5 * s, 2.9 * s,  0]
     dog_init = GuideDogDynamics.human2dog(human_init)  # x_h, y_h, x_d, y_d, theta
-    dog_goal  = GuideDogDynamics.human2dog(human_goal) 
     initial_state = np.array([human_init[0], human_init[1], dog_init[0], dog_init[1], human_init[2]])
-    goal_state = np.array([human_goal[0], human_goal[1], dog_goal[0], dog_goal[1], human_goal[2]])
+
+
+    # goals (include subgoals)
+    goal_states = []
+    goal_states.append([4.9 * s, 2.5 * s])
+    goal_states.append([6 * s, 4 * s])
+
+
+    # environment
     bounds = ((0.0 * s, 0.0 * s), (14.0 * s, 8.0 * s))
     cell_size = 0.25 * s
     grid = (bounds, cell_size)
+
+    # obstacle
     obstacles = []
+    dynamic_obstacles = []
 
     # door openning test    
     obstacles.append(RectangleRegion(2.0 * s, 8.0 * s, 1.8 * s, 2.0 * s))
     obstacles.append(RectangleRegion(2.0 * s, 4.5 * s, 3.2 * s, 3.4 * s))
     obstacles.append(RectangleRegion(5.5 * s, 8.0 * s, 3.2 * s, 3.4 * s))
 
+    # door
+    door = Door(origin=(5.4, 3.96), length=1.2, width=0.2, theta=0, horizon=11, timestep=0.1, period=[7.5, 30])
+    dynamic_obstacles.append(door)
 
-    return initial_state, goal_state, grid, obstacles
+
+    return initial_state, goal_states, grid, obstacles, dynamic_obstacles
 
 if __name__ == "__main__":
     guide_dog_simulation_test()

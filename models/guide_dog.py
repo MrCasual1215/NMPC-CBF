@@ -19,7 +19,7 @@ class GuideDogDynamics:
         " x : xh, yh, xd, yd, theta,   u : vdx, vdy, w  "
 
         dis = np.linalg.norm(np.array([x[0],x[1]])- np.array([x[2], x[3]]))
-        print(f"distance between human and dog: {dis:.2f}")
+        # print(f"distance between human and dog: {dis:.2f}")
 
         x_next = np.ndarray(shape=(5,), dtype=float)
         x_next[2] = x[2] + (u[1]*math.cos(x[4]) + u[0]*math.sin(x[4])) * timestep

@@ -32,12 +32,12 @@ class Door(DynamicObstacleControl):
 
 
     def predict(self):
-        predicted_patches = []
+        predicted_regions = []
         for i in range(self._horizon):
             predicted_pose = self.forward_dynamics(i*self._timestep*self.w + self._theta)
-            predicted_patch = PolytopeRegion.convex_hull(predicted_pose)
-            predicted_patches.append(predicted_patch)
-        return predicted_patches
+            predicted_region = PolytopeRegion.convex_hull(predicted_pose)
+            predicted_regions.append(predicted_region)
+        return predicted_regions
         
     def move(self, timestamp, w):
         self.w = 0

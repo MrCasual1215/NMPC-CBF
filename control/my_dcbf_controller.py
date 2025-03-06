@@ -8,8 +8,8 @@ class NmpcDcbfController:
         self._param = opt_param
         self._optimizer = NmpcDbcfOptimizer({}, {}, dynamics.forward_dynamics_opt(0.1))
 
-    def generate_control_input(self, system, global_path, local_trajectory, obstacles):
-        self._optimizer.setup(self._param, system, local_trajectory, obstacles)
+    def generate_control_input(self, system, global_path, local_trajectory, obstacles, dynamic_obstacle):
+        self._optimizer.setup(self._param, system, local_trajectory, obstacles, dynamic_obstacle)
         self._opt_sol = self._optimizer.solve_nlp()
         return self._opt_sol.value(self._optimizer.variables["u"][:, 0])
 

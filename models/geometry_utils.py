@@ -80,7 +80,7 @@ class PolytopeRegion(ConvexRegion2D):
         return self.mat_A, self.vec_b.reshape(self.vec_b.shape[0], -1)
 
     def get_plot_patch(self):
-        return patches.Polygon(self.points, closed=True, linewidth=1, edgecolor="k", facecolor="r")
+        return patches.Polygon(self.points, closed=True, linewidth=1, edgecolor="None", facecolor="orange")
 
 
 def get_dist_point_to_region(point, mat_A, vec_b):

@@ -11,13 +11,14 @@ class NmpcDcbfOptimizerParam:
     def __init__(self):
         self.horizon = 11
         self.horizon_dcbf = 6
-        self.mat_Q = np.diag([100.0, 100.0, 0, 0, 10])
+        self.mat_Q = np.diag([100.0, 100.0, 10, 10, 10])
         self.mat_R = np.diag([0.0, 0.0, 0.0])
         self.mat_Rold = np.diag([1.0, 1.0, 1.0]) * 0.0
         self.mat_dR = np.diag([1.0, 1.0, 1.0]) * 0.0
         self.gamma = 0.8
         self.pomega = 10.0
-        self.margin_dist = 0.00
+        self.human_margin_dist = 0.3
+        self.dog_margin_dist = 0.3
         self.terminal_weight = 10.0
         self.close2human_weight = 0
         self.max_distance_between_humandog = 1.0
@@ -124,7 +125,7 @@ class NmpcDbcfOptimizer:
             self.opti.subject_to(lamb[:, i] >= 0)
             self.opti.subject_to(
                 ca.mtimes((ca.mtimes(mat_A, self.variables["x"][0:2, i + 1]) - vec_b).T, lamb[:, i])
-                >= omega[i] * param.gamma ** (i + 1) * (cbf_curr - param.margin_dist) + param.margin_dist
+                >= omega[i] * param.gamma ** (i + 1) * (cbf_curr - param.human_margin_dist) + param.human_margin_dist
             )
             temp = ca.mtimes(mat_A.T, lamb[:, i])
             self.opti.subject_to(ca.mtimes(temp.T, temp) <= 1)
@@ -175,7 +176,7 @@ class NmpcDbcfOptimizer:
             self.opti.subject_to(mu[:, i] >= 0)
             self.opti.subject_to(
                 -ca.mtimes(robot_g.T, mu[:, i]) + ca.mtimes((ca.mtimes(mat_A, robot_T) - vec_b).T, lamb[:, i])
-                >= omega[i] * param.gamma ** (i + 1) * (cbf_curr - param.margin_dist) + param.margin_dist
+                >= omega[i] * param.gamma ** (i + 1) * (cbf_curr - 0) + 0
             )
             self.opti.subject_to(
                 ca.mtimes(robot_G.T, mu[:, i]) + ca.mtimes(ca.mtimes(robot_R.T, mat_A.T), lamb[:, i]) == 0
@@ -189,11 +190,98 @@ class NmpcDbcfOptimizer:
             self.opti.set_initial(mu[:, i], mu_curr)
             self.opti.set_initial(omega[i], 0.1)
 
-    def add_obstacle_avoidance_constraint(self, param, system, obstacles_geo):
+
+
+    def add_dynamic_point_to_convex_constraint(self, param, obs_geos, safe_dist):
+        # get current value of cbf
+        mat_A, vec_b = obs_geos[0].get_convex_rep()
+        cbf_curr, lamb_curr = get_dist_point_to_region(self.state._x[0:2], mat_A, vec_b)
+        # filter obstacle if it's still far away
+        if cbf_curr > safe_dist:
+            return
+        # duality-cbf constraints
+        lamb = self.opti.variable(mat_A.shape[0], param.horizon_dcbf)
+        omega = self.opti.variable(param.horizon_dcbf, 1)
+        for i in range(param.horizon_dcbf):
+            mat_A, vec_b = obs_geos[i].get_convex_rep()
+            self.opti.subject_to(lamb[:, i] >= 0)
+            self.opti.subject_to(
+                ca.mtimes((ca.mtimes(mat_A, self.variables["x"][0:2, i + 1]) - vec_b).T, lamb[:, i])
+                >= omega[i] * param.gamma ** (i + 1) * (cbf_curr - param.human_margin_dist) + param.human_margin_dist
+            )
+            temp = ca.mtimes(mat_A.T, lamb[:, i])
+            self.opti.subject_to(ca.mtimes(temp.T, temp) <= 1)
+            self.opti.subject_to(omega[i] >= 0)
+            self.costs["decay_rate_relaxing"] += param.pomega * (omega[i] - 1) ** 2
+            # warm start
+            self.opti.set_initial(lamb[:, i], lamb_curr)
+            self.opti.set_initial(omega[i], 0.1)
+
+
+    def add_dynamic_convex_to_convex_constraint(self, param, robot_geo, obs_geos, safe_dist):
+        mat_A, vec_b = obs_geos[0].get_convex_rep()
+        robot_G, robot_g = robot_geo.get_convex_rep()
+        # get current value of cbf
+
+        cbf_curr, lamb_curr, mu_curr = get_dist_region_to_region(
+            mat_A,
+            vec_b,
+            np.dot(robot_G, self.state.rotation().T),
+            np.dot(np.dot(robot_G, self.state.rotation().T), self.state.translation_dog()) + robot_g,
+        )
+
+        # filter obstacle if it's still far away
+        if cbf_curr > safe_dist:
+            return
+        print("cbf",param.horizon_dcbf)
+        print("len",len(obs_geos))
+        # duality-cbf constraints
+        lamb = self.opti.variable(mat_A.shape[0], param.horizon_dcbf)
+        mu = self.opti.variable(robot_G.shape[0], param.horizon_dcbf)
+        omega = self.opti.variable(param.horizon, 1)
+        for i in range(param.horizon_dcbf):
+            mat_A, vec_b = obs_geos[i].get_convex_rep()
+            robot_R = ca.hcat(
+                [
+                    ca.vcat(
+                        [
+                            ca.cos(self.variables["x"][4, i + 1]),
+                            ca.sin(self.variables["x"][4, i + 1]),
+                        ]
+                    ),
+                    ca.vcat(
+                        [
+                            -ca.sin(self.variables["x"][4, i + 1]),
+                            ca.cos(self.variables["x"][4, i + 1]),
+                        ]
+                    ),
+                ]
+            )
+            robot_T = self.variables["x"][2:4, i + 1]
+            self.opti.subject_to(lamb[:, i] >= 0)
+            self.opti.subject_to(mu[:, i] >= 0)
+            self.opti.subject_to(
+                -ca.mtimes(robot_g.T, mu[:, i]) + ca.mtimes((ca.mtimes(mat_A, robot_T) - vec_b).T, lamb[:, i])
+                >= omega[i] * param.gamma ** (i + 1) * (cbf_curr - param.dog_margin_dist) + param.dog_margin_dist
+            )
+            self.opti.subject_to(
+                ca.mtimes(robot_G.T, mu[:, i]) + ca.mtimes(ca.mtimes(robot_R.T, mat_A.T), lamb[:, i]) == 0
+            )
+            temp = ca.mtimes(mat_A.T, lamb[:, i])
+            self.opti.subject_to(ca.mtimes(temp.T, temp) <= 1)
+            self.opti.subject_to(omega[i] >= 0)
+            self.costs["decay_rate_relaxing"] += param.pomega * (omega[i] - 1) ** 2
+            # warm start
+            self.opti.set_initial(lamb[:, i], lamb_curr)
+            self.opti.set_initial(mu[:, i], mu_curr)
+            self.opti.set_initial(omega[i], 0.1)
+
+
+    def add_obstacle_avoidance_constraint(self, param, system, obstacles_geo, dynamic_obstacles):
         self.costs["decay_rate_relaxing"] = 0
         # TODO: wrap params
         # TODO: move safe dist inside attribute `system`
-        safe_dist = system._dynamics.safe_dist(0.1, 1.0, param.horizon_dcbf, param.margin_dist)
+        safe_dist = system._dynamics.safe_dist(0.1, 1.0, param.horizon_dcbf, param.dog_margin_dist)
         robot_components = system._geometry.equiv_rep()
         for obs_geo in obstacles_geo:
             for robot_comp in robot_components:
@@ -201,6 +289,15 @@ class NmpcDbcfOptimizer:
                     self.add_convex_to_convex_constraint(param, robot_comp, obs_geo, safe_dist)
                 else:
                     self.add_point_to_convex_constraint(param,  obs_geo, safe_dist)
+
+        for dynamic_obstacle in dynamic_obstacles:
+            for robot_comp in robot_components:
+                if isinstance(robot_comp, ConvexRegion2D):
+                    self.add_dynamic_convex_to_convex_constraint(param, robot_comp, dynamic_obstacle.predict(), safe_dist)
+                else:
+                    pass
+                    # self.add_dynamic_point_to_convex_constraint(param,  dynamic_obstacle.predict(), safe_dist)
+  
 
 
 
@@ -239,7 +336,7 @@ class NmpcDbcfOptimizer:
             self.opti.set_initial(self.variables["x"][:, i + 1], x_ws)
             self.opti.set_initial(self.variables["u"][:, i], u_ws)
 
-    def setup(self, param, system, reference_trajectory, obstacles):
+    def setup(self, param, system, reference_trajectory, obstacles, dynamic_obstacles):
         self.set_state(system._state)
         self.opti = ca.Opti()
         self.initialize_variables(param)
@@ -251,7 +348,7 @@ class NmpcDbcfOptimizer:
         self.add_input_stage_cost(param)
         self.add_prev_input_cost(param)
         self.add_input_smoothness_cost(param)
-        self.add_obstacle_avoidance_constraint(param, system, obstacles)
+        self.add_obstacle_avoidance_constraint(param, system, obstacles, dynamic_obstacles)
         # self.add_get_close2human_cost(param)
         # self.add_get_close2human_constraint(param)
         self.add_warm_start(param, system)
