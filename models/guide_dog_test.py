@@ -108,7 +108,7 @@ def guide_dog_simulation_test():
         )
     )
 
-    global_path_margin = 0.4
+    global_path_margin = 0.3
     robot.set_global_planner(AstarLoSPathGenerator(grid, quad=False, margin=global_path_margin))
     robot.set_local_planner(GuideDogTrajectoryGenerator())
     robot.set_controller(NmpcDcbfController(dynamics=GuideDogDynamics(), opt_param=NmpcDcbfOptimizerParam()))
@@ -125,22 +125,23 @@ def guide_dog_simulation_test():
 
 def create_env():
     s = 1.2 # scale of environment
-    human_init = [0.5 * s, 5.5 * s,  -math.pi/2]
-    human_goal = [8 * s, 5 * s,  0]
+    human_init = [2 * s, 2.7 * s,  0]
+    human_goal = [5 * s, 2.9 * s,  0]
     dog_init = GuideDogDynamics.human2dog(human_init)  # x_h, y_h, x_d, y_d, theta
     dog_goal  = GuideDogDynamics.human2dog(human_goal) 
     initial_state = np.array([human_init[0], human_init[1], dog_init[0], dog_init[1], human_init[2]])
     goal_state = np.array([human_goal[0], human_goal[1], dog_goal[0], dog_goal[1], human_goal[2]])
-    bounds = ((0.0 * s, 0.0 * s), (13.0 * s, 6.0 * s))
+    bounds = ((0.0 * s, 0.0 * s), (14.0 * s, 8.0 * s))
     cell_size = 0.25 * s
     grid = (bounds, cell_size)
     obstacles = []
-    obstacles.append(RectangleRegion(0.0 * s, 3.0 * s, 0.0 * s, 3.0 * s))
-    obstacles.append(RectangleRegion(1.0 * s, 2.0 * s, 4.0 * s, 6.0 * s))
-    obstacles.append(RectangleRegion(2.0 * s, 6.0 * s, 5.0 * s, 6.0 * s))
-    obstacles.append(RectangleRegion(6.0 * s, 7.0 * s, 3.0 * s, 6.0 * s))
-    obstacles.append(RectangleRegion(4.0 * s, 5.0 * s, 0.0 * s, 4.0 * s))
-    obstacles.append(RectangleRegion(9.0 * s, 10.0 * s, -1.0 * s, 7.0 * s))
+
+    # door openning test    
+    obstacles.append(RectangleRegion(2.0 * s, 8.0 * s, 1.8 * s, 2.0 * s))
+    obstacles.append(RectangleRegion(2.0 * s, 4.5 * s, 3.2 * s, 3.4 * s))
+    obstacles.append(RectangleRegion(5.5 * s, 8.0 * s, 3.2 * s, 3.4 * s))
+
+
     return initial_state, goal_state, grid, obstacles
 
 if __name__ == "__main__":

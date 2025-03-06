@@ -82,6 +82,8 @@ class SingleAgentSimulation:
     def show(self):
         self.ax.cla() 
         self.ax.set_aspect("equal")
+        self.ax.set_xlim(0, 12)
+        self.ax.set_ylim(0, 8)
 
 
         local_path = self._robot._local_planner_logger._trajs[-1]
