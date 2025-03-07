@@ -2,3 +2,4 @@
 ### 模型： delayed model
 
 ![示例 GIF](./guide_dog.gif)
+
